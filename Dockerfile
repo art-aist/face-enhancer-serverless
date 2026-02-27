@@ -16,7 +16,7 @@
 #   bash build_and_push.sh <dockerhub_user>
 # =============================================================
 
-FROM pytorch/pytorch:2.1.0-cuda12.1-cudnn8-runtime
+FROM pytorch/pytorch:2.10.0-cuda12.6-cudnn9-runtime
 
 LABEL maintainer="art@aist.digital"
 LABEL description="ComfyUI Face Enhancer — RunPod Serverless, any GPU with CUDA 12+"
@@ -37,17 +37,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-# --- Clone ComfyUI ---
-RUN git clone --depth 1 https://github.com/comfyanonymous/ComfyUI.git $COMFYUI_PATH
+# --- Clone ComfyUI (pin to stable commit) ---
+RUN git clone https://github.com/comfyanonymous/ComfyUI.git $COMFYUI_PATH
 
 WORKDIR $COMFYUI_PATH
 
 # --- Install ComfyUI requirements ---
 RUN pip install --no-cache-dir -r requirements.txt
 
-# --- Fix numpy + install RunPod SDK ---
+# --- Install RunPod SDK ---
 RUN pip install --no-cache-dir \
-    "numpy<2.4" \
     "runpod>=1.7.0" \
     "requests>=2.31.0"
 
