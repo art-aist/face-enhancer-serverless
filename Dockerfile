@@ -23,6 +23,7 @@ LABEL description="ComfyUI Face Enhancer — RunPod Serverless, any GPU with CUD
 
 # --- Env ---
 ENV DEBIAN_FRONTEND=noninteractive
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
 ENV COMFYUI_PATH=/opt/ComfyUI
 ENV COMFYUI_PORT=8188
 
@@ -42,8 +43,9 @@ RUN git clone https://github.com/comfyanonymous/ComfyUI.git $COMFYUI_PATH
 
 WORKDIR $COMFYUI_PATH
 
-# --- Install ComfyUI requirements ---
-RUN pip install --no-cache-dir -r requirements.txt
+# --- Install ComfyUI requirements (skip torch — already in base image) ---
+RUN grep -v -E "^torch" requirements.txt > /tmp/comfy_req.txt && \
+    pip install --no-cache-dir -r /tmp/comfy_req.txt
 
 # --- Install RunPod SDK ---
 RUN pip install --no-cache-dir \
