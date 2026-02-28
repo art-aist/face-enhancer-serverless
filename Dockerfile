@@ -43,8 +43,8 @@ RUN git clone https://github.com/comfyanonymous/ComfyUI.git $COMFYUI_PATH
 
 WORKDIR $COMFYUI_PATH
 
-# --- Install ComfyUI requirements (skip torch — already in base image) ---
-RUN grep -v -E "^torch" requirements.txt > /tmp/comfy_req.txt && \
+# --- Install ComfyUI requirements (skip torch/torchvision/torchaudio — already in base image) ---
+RUN grep -v -E "^(torch|torchvision|torchaudio)([ ><=!]|$)" requirements.txt > /tmp/comfy_req.txt && \
     pip install --no-cache-dir -r /tmp/comfy_req.txt
 
 # --- Install RunPod SDK ---
@@ -86,11 +86,12 @@ RUN FAILED="" && \
     fi
 
 # --- Download SAM ViT-L (~1.25GB) ---
-RUN mkdir -p $COMFYUI_PATH/models/sams && \
+# Note: ComfyUI-RMBG looks in models/sam/ (not "sams")
+RUN mkdir -p $COMFYUI_PATH/models/sam && \
     echo "Downloading SAM ViT-L..." && \
-    wget -q --show-progress -O $COMFYUI_PATH/models/sams/sam_vit_l_0b3195.pth \
+    wget -q --show-progress -O $COMFYUI_PATH/models/sam/sam_vit_l_0b3195.pth \
     "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_l_0b3195.pth" && \
-    echo "SAM ViT-L downloaded: $(du -sh $COMFYUI_PATH/models/sams/sam_vit_l_0b3195.pth)"
+    echo "SAM ViT-L downloaded: $(du -sh $COMFYUI_PATH/models/sam/sam_vit_l_0b3195.pth)"
 
 # --- Download GroundingDINO SwinT OGC (~694MB) ---
 RUN mkdir -p $COMFYUI_PATH/models/grounding-dino && \
@@ -111,7 +112,7 @@ print(f'CUDA: {torch.version.cuda}'); \
 import runpod; print(f'RunPod SDK: {runpod.__version__}'); \
 import numpy; print(f'NumPy: {numpy.__version__}'); \
 import os; \
-sams = '/opt/ComfyUI/models/sams/sam_vit_l_0b3195.pth'; \
+sams = '/opt/ComfyUI/models/sam/sam_vit_l_0b3195.pth'; \
 dino = '/opt/ComfyUI/models/grounding-dino/groundingdino_swint_ogc.pth'; \
 print(f'SAM ViT-L: {os.path.getsize(sams)/1e9:.2f}GB' if os.path.exists(sams) else 'SAM: MISSING!'); \
 print(f'GroundingDINO: {os.path.getsize(dino)/1e9:.2f}GB' if os.path.exists(dino) else 'GroundingDINO: MISSING!'); \
