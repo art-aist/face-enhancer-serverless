@@ -47,7 +47,44 @@ COMFYUI_HOST = f"http://127.0.0.1:{COMFYUI_PORT}"
 COMFYUI_STARTUP_TIMEOUT = int(os.environ.get("COMFYUI_STARTUP_TIMEOUT", "120"))
 COMFYUI_ARGS = os.environ.get("COMFYUI_ARGS", "")
 
+# --- ComfyUI API auth (Firebase) ---
+FIREBASE_API_KEY = os.environ.get("FIREBASE_API_KEY", "")
+COMFY_REFRESH_TOKEN = os.environ.get("COMFY_REFRESH_TOKEN", "")
+
 comfyui_process = None
+
+# Cache for refreshed access token
+_cached_token = {"access_token": None, "expires_at": 0}
+
+
+def get_comfy_auth_token():
+    """Get a fresh ComfyUI auth token using Firebase refresh token."""
+    if not FIREBASE_API_KEY or not COMFY_REFRESH_TOKEN:
+        print("[handler] No Firebase credentials — skipping auth")
+        return None
+
+    now = time.time()
+    if _cached_token["access_token"] and now < _cached_token["expires_at"] - 60:
+        return _cached_token["access_token"]
+
+    resp = requests.post(
+        f"https://securetoken.googleapis.com/v1/token?key={FIREBASE_API_KEY}",
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": COMFY_REFRESH_TOKEN,
+        },
+        timeout=10,
+    )
+
+    if resp.status_code == 200:
+        data = resp.json()
+        _cached_token["access_token"] = data["id_token"]
+        _cached_token["expires_at"] = now + int(data.get("expires_in", 3600))
+        print("[handler] Auth token refreshed OK")
+        return _cached_token["access_token"]
+    else:
+        print(f"[handler] Token refresh failed ({resp.status_code}): {resp.text}")
+        return None
 
 
 def start_comfyui():
@@ -135,6 +172,13 @@ def queue_workflow(workflow):
         "prompt": workflow,
         "client_id": client_id,
     }
+
+    # Inject ComfyUI auth token for API nodes (GeminiImage2Node etc.)
+    auth_token = get_comfy_auth_token()
+    if auth_token:
+        payload["extra_data"] = {
+            "auth_token_comfy_org": auth_token,
+        }
 
     resp = requests.post(
         f"{COMFYUI_HOST}/prompt",
