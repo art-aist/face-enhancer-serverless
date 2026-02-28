@@ -226,12 +226,21 @@ def wait_for_completion(prompt_id, timeout=600, poll_interval=2):
     raise RuntimeError(f"Workflow timeout after {timeout}s")
 
 
-def collect_output_images(history_entry):
-    """Collect output images from ComfyUI history entry as base64."""
+def collect_output_images(history_entry, only_nodes=None):
+    """Collect output images from ComfyUI history entry as base64.
+
+    Args:
+        history_entry: ComfyUI history entry dict.
+        only_nodes: Optional set of node IDs to collect. If None, collect all.
+    """
     outputs = history_entry.get("outputs", {})
     images = []
 
     for node_id, node_output in outputs.items():
+        if only_nodes and node_id not in only_nodes:
+            print(f"[handler] Skipping node={node_id} (not in filter)")
+            continue
+
         if "images" in node_output:
             for img_info in node_output["images"]:
                 filename = img_info.get("filename")
@@ -309,7 +318,13 @@ def handler(job):
         history_entry = wait_for_completion(prompt_id, timeout=execution_timeout)
 
         # --- Collect outputs ---
-        images = collect_output_images(history_entry)
+        # Only collect needed nodes to keep response under RunPod size limit:
+        #   68 = SaveImage (final composited result)
+        #   41 = PreviewImage (face crop before enhancement)
+        #   40 = PreviewImage (Gemini enhanced face)
+        output_nodes = job_input.get("output_nodes")
+        only_nodes = set(output_nodes) if output_nodes else {"68", "41", "40"}
+        images = collect_output_images(history_entry, only_nodes=only_nodes)
 
         if not images:
             return {"error": "Workflow completed but no output images found"}
