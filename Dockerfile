@@ -7,7 +7,7 @@
 # What's inside:
 #   - ComfyUI (latest)
 #   - 11 custom nodes for Face Enhancement workflow
-#   - SAM ViT-L (1.25GB) + GroundingDINO (694MB) — baked in
+#   - SAM3 (3.3GB) for face segmentation — baked in
 #   - RunPod serverless handler
 #   - DWPose: auto-downloaded on first run
 #   - GeminiImage2Node: built into ComfyUI core
@@ -26,6 +26,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV PIP_BREAK_SYSTEM_PACKAGES=1
 ENV COMFYUI_PATH=/opt/ComfyUI
 ENV COMFYUI_PORT=8188
+ENV SAM2_BUILD_CUDA=0
 
 # --- System deps ---
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -85,20 +86,24 @@ RUN FAILED="" && \
       echo "All node deps installed OK"; \
     fi
 
-# --- Download SAM ViT-L (~1.25GB) ---
-# Note: ComfyUI-RMBG looks in models/sam/ (not "sams")
-RUN mkdir -p $COMFYUI_PATH/models/sam && \
-    echo "Downloading SAM ViT-L..." && \
-    wget -q --show-progress -O $COMFYUI_PATH/models/sam/sam_vit_l_0b3195.pth \
-    "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_l_0b3195.pth" && \
-    echo "SAM ViT-L downloaded: $(du -sh $COMFYUI_PATH/models/sam/sam_vit_l_0b3195.pth)"
+# --- Install SAM-2 + SAM3 dependencies (skip CUDA compilation via SAM2_BUILD_CUDA=0) ---
+RUN pip install --no-cache-dir \
+    "SAM-2>=1.0" \
+    "segment-anything>=1.0" \
+    "opencv-python-headless>=4.7.0" \
+    "transformers>=4.30.0" \
+    "decord" \
+    "ftfy" \
+    "hydra-core>=1.3.0" \
+    "omegaconf>=2.3.0" \
+    "iopath>=0.1.9"
 
-# --- Download GroundingDINO SwinT OGC (~694MB) ---
-RUN mkdir -p $COMFYUI_PATH/models/grounding-dino && \
-    echo "Downloading GroundingDINO..." && \
-    wget -q --show-progress -O $COMFYUI_PATH/models/grounding-dino/groundingdino_swint_ogc.pth \
-    "https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha/groundingdino_swint_ogc.pth" && \
-    echo "GroundingDINO downloaded: $(du -sh $COMFYUI_PATH/models/grounding-dino/groundingdino_swint_ogc.pth)"
+# --- Download SAM3 model (~3.3GB) ---
+RUN mkdir -p $COMFYUI_PATH/models/sam3 && \
+    echo "Downloading SAM3..." && \
+    wget -q --show-progress -O $COMFYUI_PATH/models/sam3/sam3.pt \
+    "https://huggingface.co/1038lab/sam3/resolve/main/sam3.pt" && \
+    echo "SAM3 downloaded: $(du -sh $COMFYUI_PATH/models/sam3/sam3.pt)"
 
 # --- Copy handler ---
 COPY handler.py /opt/handler.py
@@ -112,10 +117,9 @@ print(f'CUDA: {torch.version.cuda}'); \
 import runpod; print(f'RunPod SDK: {runpod.__version__}'); \
 import numpy; print(f'NumPy: {numpy.__version__}'); \
 import os; \
-sams = '/opt/ComfyUI/models/sam/sam_vit_l_0b3195.pth'; \
-dino = '/opt/ComfyUI/models/grounding-dino/groundingdino_swint_ogc.pth'; \
-print(f'SAM ViT-L: {os.path.getsize(sams)/1e9:.2f}GB' if os.path.exists(sams) else 'SAM: MISSING!'); \
-print(f'GroundingDINO: {os.path.getsize(dino)/1e9:.2f}GB' if os.path.exists(dino) else 'GroundingDINO: MISSING!'); \
+sam3 = '/opt/ComfyUI/models/sam3/sam3.pt'; \
+print(f'SAM3: {os.path.getsize(sam3)/1e9:.2f}GB' if os.path.exists(sam3) else 'SAM3: MISSING!'); \
+from sam2.sam2_image_predictor import SAM2ImagePredictor; print('SAM-2 import: OK'); \
 nodes = os.listdir('/opt/ComfyUI/custom_nodes'); \
 print(f'Custom nodes: {len(nodes)} installed'); \
 print('Build OK!'); \
