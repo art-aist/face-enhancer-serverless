@@ -194,10 +194,6 @@ def collect_output_images(history_entry):
                 subfolder = img_info.get("subfolder", "")
                 img_type = img_info.get("type", "output")
 
-                # Skip preview images
-                if img_type == "temp":
-                    continue
-
                 # Fetch image from ComfyUI
                 params = {
                     "filename": filename,
@@ -226,11 +222,14 @@ def collect_output_images(history_entry):
 
 def handler(job):
     """RunPod serverless handler — main entry point."""
+    print(f"[handler] === Job received ===")
     job_input = job.get("input", {})
+    print(f"[handler] Input keys: {list(job_input.keys())}")
 
     # --- Validate input ---
     workflow = job_input.get("workflow")
     if not workflow:
+        print("[handler] ERROR: Missing 'workflow' in input")
         return {"error": "Missing 'workflow' in input"}
 
     input_images = job_input.get("images", [])
@@ -246,13 +245,17 @@ def handler(job):
                 uploaded_names[name] = uploaded_name
 
         # --- Patch workflow with uploaded image names ---
-        # Replace LoadImage node filenames with uploaded filenames
-        for node_id, node in workflow.items():
-            if node.get("class_type") == "LoadImage":
-                inputs = node.get("inputs", {})
-                original_name = inputs.get("image", "")
-                if original_name in uploaded_names:
-                    inputs["image"] = uploaded_names[original_name]
+        if uploaded_names:
+            for node_id, node in workflow.items():
+                if node.get("class_type") == "LoadImage":
+                    inputs = node.get("inputs", {})
+                    original_name = inputs.get("image", "")
+                    if original_name in uploaded_names:
+                        # Exact name match
+                        inputs["image"] = uploaded_names[original_name]
+                    elif len(uploaded_names) == 1:
+                        # Single image uploaded — apply to all LoadImage nodes
+                        inputs["image"] = list(uploaded_names.values())[0]
 
         # --- Queue workflow ---
         prompt_id, client_id = queue_workflow(workflow)
