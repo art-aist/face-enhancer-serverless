@@ -38,6 +38,7 @@ import threading
 import requests
 from io import BytesIO
 
+from PIL import Image
 import runpod
 
 # --- Configuration ---
@@ -226,15 +227,35 @@ def wait_for_completion(prompt_id, timeout=600, poll_interval=2):
     raise RuntimeError(f"Workflow timeout after {timeout}s")
 
 
-def collect_output_images(history_entry, only_nodes=None):
+def _compress_to_jpeg(raw_bytes, max_size=1024, quality=85):
+    """Compress image bytes to JPEG, optionally resizing if larger than max_size."""
+    img = Image.open(BytesIO(raw_bytes))
+    if img.mode == "RGBA":
+        img = img.convert("RGB")
+
+    # Resize if either dimension exceeds max_size
+    w, h = img.size
+    if max(w, h) > max_size:
+        ratio = max_size / max(w, h)
+        img = img.resize((int(w * ratio), int(h * ratio)), Image.LANCZOS)
+
+    buf = BytesIO()
+    img.save(buf, format="JPEG", quality=quality)
+    return buf.getvalue()
+
+
+def collect_output_images(history_entry, only_nodes=None, compress_nodes=None):
     """Collect output images from ComfyUI history entry as base64.
 
     Args:
         history_entry: ComfyUI history entry dict.
         only_nodes: Optional set of node IDs to collect. If None, collect all.
+        compress_nodes: Optional set of node IDs to compress to JPEG.
+                        Nodes NOT in this set are returned as-is (original PNG).
     """
     outputs = history_entry.get("outputs", {})
     images = []
+    compress_nodes = compress_nodes or set()
 
     for node_id, node_output in outputs.items():
         if only_nodes and node_id not in only_nodes:
@@ -260,13 +281,25 @@ def collect_output_images(history_entry, only_nodes=None):
                 )
 
                 if resp.status_code == 200:
-                    img_b64 = base64.b64encode(resp.content).decode("utf-8")
+                    raw_bytes = resp.content
+                    original_kb = len(raw_bytes) // 1024
+
+                    if node_id in compress_nodes:
+                        compressed = _compress_to_jpeg(raw_bytes)
+                        img_b64 = base64.b64encode(compressed).decode("utf-8")
+                        compressed_kb = len(compressed) // 1024
+                        print(f"[handler] Collected: node={node_id}, file={filename}, "
+                              f"{original_kb}KB -> {compressed_kb}KB (JPEG)")
+                    else:
+                        img_b64 = base64.b64encode(raw_bytes).decode("utf-8")
+                        print(f"[handler] Collected: node={node_id}, file={filename}, "
+                              f"{original_kb}KB (original)")
+
                     images.append({
                         "filename": filename,
                         "node_id": node_id,
                         "image": img_b64,
                     })
-                    print(f"[handler] Collected: node={node_id}, file={filename}")
                 else:
                     print(f"[handler] Failed to fetch {filename}: {resp.status_code}")
 
@@ -319,12 +352,16 @@ def handler(job):
 
         # --- Collect outputs ---
         # Only collect needed nodes to keep response under RunPod size limit:
-        #   68 = SaveImage (final composited result)
-        #   41 = PreviewImage (face crop before enhancement)
-        #   40 = PreviewImage (Gemini enhanced face)
+        #   68 = SaveImage (final composited result) — full quality PNG
+        #   41 = PreviewImage (face crop before) — compressed JPEG
+        #   40 = PreviewImage (Gemini enhanced face) — compressed JPEG
         output_nodes = job_input.get("output_nodes")
         only_nodes = set(output_nodes) if output_nodes else {"68", "41", "40"}
-        images = collect_output_images(history_entry, only_nodes=only_nodes)
+        # Compress preview nodes to JPEG; keep SaveImage (68) as original PNG
+        compress_nodes = only_nodes - {"68"}
+        images = collect_output_images(
+            history_entry, only_nodes=only_nodes, compress_nodes=compress_nodes
+        )
 
         if not images:
             return {"error": "Workflow completed but no output images found"}
