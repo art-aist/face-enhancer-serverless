@@ -88,7 +88,7 @@ RUN FAILED="" && \
 
 # --- Install SAM-2 + SAM3 dependencies (skip CUDA compilation via SAM2_BUILD_CUDA=0) ---
 RUN pip install --no-cache-dir \
-    "SAM-2>=1.0" \
+    "git+https://github.com/facebookresearch/sam2.git" \
     "segment-anything>=1.0" \
     "opencv-python-headless>=4.7.0" \
     "transformers>=4.30.0" \
