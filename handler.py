@@ -77,7 +77,7 @@ DETECT_WORKFLOW = {
             "confidence_threshold": 0.25,
             "max_segments": 5,
             "segment_pick": 1,
-            "mask_blur": 8,
+            "mask_blur": 4,
             "mask_offset": 0,
             "device": "Auto",
             "invert_output": False,
@@ -133,9 +133,9 @@ SAM3_BBOX_WORKFLOW = {
         "_meta": {"title": "SAM3 Segmentation (RMBG)"},
     },
     "5": {
-        "inputs": {"images": ["2", 2]},
-        "class_type": "PreviewImage",
-        "_meta": {"title": "Preview Image"},
+        "inputs": {"mask": ["2", 1]},
+        "class_type": "MaskPreview",
+        "_meta": {"title": "Mask Preview"},
     },
     "7": {
         "inputs": {"invert": False, "mask": ["2", 1]},
@@ -566,9 +566,9 @@ def handle_detect(job_input):
     prompt_id, _ = queue_workflow(wf)
     history = wait_for_completion(prompt_id, timeout=120)
 
-    # Fetch mask preview from node 4
+    # Fetch mask preview from node 4 (keep as PNG — JPEG destroys semi-transparent overlays)
     preview_bytes = fetch_image_from_history(history, "4")
-    preview_b64 = _image_to_b64(preview_bytes, compress=True)
+    preview_b64 = _image_to_b64(preview_bytes, compress=False)
 
     return {
         "status": "success",
@@ -617,9 +617,9 @@ def handle_enhance(job_input):
     prompt_id, _ = queue_workflow(wf_sam3)
     history_sam3 = wait_for_completion(prompt_id, timeout=120)
 
-    # Get mask image (node 5: PreviewImage of MASK_IMAGE)
+    # Get mask image (node 5: PreviewImage of MASK_IMAGE) — keep as PNG for clean compositing
     mask_bytes = fetch_image_from_history(history_sam3, "5")
-    mask_b64 = _image_to_b64(mask_bytes, compress=True)
+    mask_b64 = _image_to_b64(mask_bytes, compress=False)
     print(f"[handler] Mask image: {len(mask_bytes) // 1024}KB")
 
     # Get bbox text (node 9: Show Any)
