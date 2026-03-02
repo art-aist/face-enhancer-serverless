@@ -662,10 +662,13 @@ def handle_enhance(job_input):
     prompt_id, _ = queue_workflow(wf_gemini)
     history_gemini = wait_for_completion(prompt_id, timeout=300)
 
-    # Get enhanced image (node 16: PreviewImage)
+    # Get enhanced image (node 16: PreviewImage) — compress to JPEG for transfer
+    # 4K PNG can be 25-30MB, exceeding RunPod response limit (~20MB)
     enhanced_bytes = fetch_image_from_history(history_gemini, "16")
-    enhanced_b64 = base64.b64encode(enhanced_bytes).decode("utf-8")
-    print(f"[handler] Enhanced image: {len(enhanced_bytes) // 1024}KB")
+    print(f"[handler] Enhanced image raw: {len(enhanced_bytes) // 1024}KB")
+    enhanced_compressed = _compress_to_jpeg(enhanced_bytes, max_size=4096, quality=95)
+    enhanced_b64 = base64.b64encode(enhanced_compressed).decode("utf-8")
+    print(f"[handler] Enhanced image compressed: {len(enhanced_compressed) // 1024}KB")
 
     # === Return results ===
     return {
