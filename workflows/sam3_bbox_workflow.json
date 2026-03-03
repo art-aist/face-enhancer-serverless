@@ -1,0 +1,61 @@
+{
+  "1": {
+    "inputs": {
+      "image": "input.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    }
+  },
+  "2": {
+    "inputs": {
+      "prompt": "head",
+      "output_mode": "Merged",
+      "confidence_threshold": 0.25,
+      "max_segments": 5,
+      "segment_pick": 1,
+      "mask_blur": 0,
+      "mask_offset": 0,
+      "device": "Auto",
+      "invert_output": false,
+      "unload_model": false,
+      "background": "Color",
+      "background_color": "#222222",
+      "image": ["1", 0]
+    },
+    "class_type": "SAM3Segment",
+    "_meta": {
+      "title": "SAM3 Segmentation (RMBG)"
+    }
+  },
+  "5": {
+    "inputs": {
+      "mask": ["2", 1]
+    },
+    "class_type": "MaskPreview",
+    "_meta": {
+      "title": "Mask Preview"
+    }
+  },
+  "7": {
+    "inputs": {
+      "invert": false,
+      "mask": ["2", 1]
+    },
+    "class_type": "Bbox From Mask (mtb)",
+    "_meta": {
+      "title": "Bbox From Mask (mtb)"
+    }
+  },
+  "9": {
+    "inputs": {
+      "text": "",
+      "anything": ["7", 0]
+    },
+    "class_type": "easy showAnything",
+    "_meta": {
+      "title": "Show Any"
+    }
+  }
+}
